@@ -24,8 +24,14 @@ def write_log(name, in_1, in_2):
             ifile.write(f'There are {in_2} bp in the assembly.\n')
         elif name == "blast":
             ifile.write(f'{in_1}\n')
-        else: # will write the SSR1 and SSR2 read counts to log
-            ifile.write(f'{name} had {in_1} read pairs before Bowtie2 filtering and {in_2} read pairs after.\n')
+        elif name == "hits":
+            with open(f'{in_1}', 'r') as hold:
+                for line in hold:
+                    ifile.write(line)
+        elif name == "SSR1":
+            ifile.write(f'Donor 1 (2dpi) had {in_1} read pairs before Bowtie2 filtering and {in_2} read pairs after.\n')
+        else: # will write SSR2 read counts to log
+            ifile.write(f'Donor 1 (6dpi) had {in_1} read pairs before Bowtie2 filtering and {in_2} read pairs after.\n')
 
 # count reads from flagstat output
 def read_c(file):
@@ -79,14 +85,14 @@ def main():
     hcmv_g = "NC_006273.2.fasta" # ncmv fasta file name
     hcmv_i = "HCMV_index"
     # sample fastqs
-    ssr1_1 = 'SSR01_1.fastq' # _1 = FWD
-    ssr1_2 = 'SSR01_2.fastq' # _2 = REV
-    ssr2_1 = 'SSR02_1.fastq' # CHANGE BACK TO SSR2_1.FASTQ BEFORE SUBMITTING
-    ssr2_2 = 'SSR02_2.fastq'
+    ssr1_1 = 'SSR1_1.fastq' # _1 = FWD
+    ssr1_2 = 'SSR1_2.fastq' # _2 = REV
+    ssr2_1 = 'SSR2_1.fastq' 
+    ssr2_2 = 'SSR2_2.fastq'
 
     # check if fastq files exist - had issues with files being read in 
     for fq_file in [ssr1_1, ssr1_2, ssr2_1, ssr2_2]:
-        if not os.path.exists(fq_file):
+        if not os.path.exists(fq_file): 
             print(f"Error: {fq_file} does not exist.")
             sys.exit()
 
@@ -97,7 +103,7 @@ def main():
         map('SSR1', ssr1_1, ssr1_2, hcmv_i) # running map function with the paired fastq files and index
         map('SSR2', ssr2_1, ssr2_2, hcmv_i)
 
-        spds_cmd = ('spades.py -k 99 -1 bow_SSR1_1.fastq -2 bow_SSR1_2.fastq -1 bow_SSR2_1.fastq -2 bow_SSR2_2.fastq -o assembly_out') # spades command using bowtie2 output in fastq format
+        spds_cmd = ('spades.py --rna -1 bow_SSR1_1.fastq -2 bow_SSR1_2.fastq -1 bow_SSR2_1.fastq -2 bow_SSR2_2.fastq -k 99 -o assembly_out') # spades command using bowtie2 output in fastq format
         run_bash(spds_cmd) # running spades command
         write_log("spades", spds_cmd, "") # writing command to log file
         contigs('assembly_out/contigs.fasta') # calling contig function with contigs.fasta from the assembly
@@ -107,8 +113,9 @@ def main():
         run_bash('mv ncbi_dataset/data/genomic.fna betaherpesvirinae.fna') # move genomic data to betaherpesvirinae.fna
         run_bash('makeblastdb -in betaherpesvirinae.fna -out betaherpesvirinae -title betaherpesvirinae -dbtype nucl') # make blastdb from the genomic data
         write_log("blast", "sacc\tpident\tlength\tqstart\tqend\tsstart\tsend\tbitscore\tevalue\tstitle", "") # write header row, \t is tab character
-        # run blast with longest contig fasta against the created db, specify format, append results to log
-        run_bash('blastn -query longest_contig.fasta -db betaherpesvirinae -outfmt "6 sacc pident length qstart qend sstart send bitscore evalue stitle" -max_target_seqs 10 -max_hsps 1 >> PipelineProject.log')
+        # run blast with longest contig fasta against the created db, specify format, save results to a hold file to prevent append issues
+        run_bash('blastn -query longest_contig.fasta -db betaherpesvirinae -outfmt "6 sacc pident length qstart qend sstart send bitscore evalue stitle" -max_target_seqs 10 -max_hsps 1 -out hold_hits.tsv')
+        write_log("hits", 'hold_hits.tsv', '') # send the hold file to write_log funct
     else:
         print(f"Failed to download the genome file {hcmv_g}.")
         sys.exit()
