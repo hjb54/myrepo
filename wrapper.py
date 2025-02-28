@@ -1,4 +1,5 @@
 import sys, os
+from Bio import SeqIO
 
 mypath = 'PipelineProject_Hannah_Brown'
 if os.path.exists(mypath) and os.path.isdir(mypath): # checks if appropriate directory exists and is a directory
@@ -58,26 +59,14 @@ def map(name, fq_1, fq_2, index):
 
 # function for processing assembly fasta into contigs and contig-related data
 def contigs(fq):
-    contigs = [] # initalize list for all contigs
-    with open(fq, 'r') as f:
-        contig = '' #initalize str for contig seq
-        for line in f:
-            if line.startswith('>'): # header = new contig
-                if contig: # appends contig to list if contig var isnt empty
-                    contigs.append(contig)
-                contig = '' # empty str for next contig
-            else:
-                contig += line.strip() # strips and adds to current contig string
-        if contig:
-            contigs.append(contig) # makes sure all contigs are appended
-    contig_1000 = [contig for contig in contigs if len(contig) > 1000] # list of all contigs that are > 1000
+    contigs = list(SeqIO.parse(fq, "fasta")) # initalize list for all contigs
+    contig_1000 = [contig for contig in contigs if len(contig.seq) > 1000] # list of all contigs that are > 1000
     c_1000 = len(contig_1000) # lenth of the list OR how many contigs > 1000
-    tot_bp = sum(len(contig) for contig in contig_1000) # sum of the contig lengths for all contigs > 1000
+    tot_bp = sum(len(contig.seq) for contig in contig_1000) # sum of the contig lengths for all contigs > 1000
     write_log("contigs", c_1000, tot_bp) # write to log file
-    longest_c = max(contigs, key= len) # stores longest contig, finds max by length
+    longest_c = max(contigs, key= lambda contig: len(contig.seq)) # stores longest contig, finds max by length
     with open("longest_contig.fasta", 'w') as file: # writing the longest contig in fasta format for blast
-        file.write(">longest_contig\n")
-        file.write(longest_c + '\n')
+        SeqIO.write(longest_c, file, 'fasta')
 
 def main():
     run_bash('>PipelineProject.log') # clear log at beginning of new run
@@ -114,7 +103,7 @@ def main():
         run_bash('makeblastdb -in betaherpesvirinae.fna -out betaherpesvirinae -title betaherpesvirinae -dbtype nucl') # make blastdb from the genomic data
         write_log("blast", "sacc\tpident\tlength\tqstart\tqend\tsstart\tsend\tbitscore\tevalue\tstitle", "") # write header row, \t is tab character
         # run blast with longest contig fasta against the created db, specify format, save results to a hold file to prevent append issues
-        run_bash('blastn -query longest_contig.fasta -db betaherpesvirinae -outfmt "6 sacc pident length qstart qend sstart send bitscore evalue stitle" -max_target_seqs 10 -max_hsps 1 -out hold_hits.tsv')
+        run_bash('blastn -query longest_contig.fasta -db betaherpesvirinae -task blastn -outfmt "6 sacc pident length qstart qend sstart send bitscore evalue stitle" -max_target_seqs 10 -max_hsps 1 -out hold_hits.tsv') #runs blastn, specifies type= blastn to insure a megablast is not run. 
         write_log("hits", 'hold_hits.tsv', '') # send the hold file to write_log funct
     else:
         print(f"Failed to download the genome file {hcmv_g}.")
@@ -122,4 +111,3 @@ def main():
     
 if __name__ == "__main__":
     main()
-
